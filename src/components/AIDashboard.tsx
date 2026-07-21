@@ -204,7 +204,7 @@ export default function AIDashboard({
   };
 
   return (
-    <div className="glass-panel rounded-2xl p-4 shadow-2xl border border-slate-700/40 text-slate-100 flex flex-col gap-4 max-h-[85vh] overflow-y-auto w-full">
+    <div className="text-slate-100 flex flex-col gap-4 p-1 w-full">
       
       {/* Title */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-3">

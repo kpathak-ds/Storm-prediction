@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Layers, FolderOpen, Calendar, Trash2, Sliders, HelpCircle, X, Map, FileUp, PlusCircle } from 'lucide-react';
+import { FolderOpen, Calendar, Trash2, Sliders, HelpCircle, X, Map, FileUp, PlusCircle } from 'lucide-react';
 import { GIS_CATALOG, type GisLayerDef } from '../api/gisCatalog';
 
 export interface UploadedKml {
@@ -31,7 +31,7 @@ interface GeoPortalPanelProps {
 const PALETTE = ['#ff2d2d', '#3fb1ff', '#5fa05f', '#f0a429', '#c678dd', '#ff9e64', '#56d4bb', '#e06c75'];
 
 export default function GeoPortalPanel({
-  onClose,
+  onClose: _onClose,
   activeGisLayers,
   onToggleGisLayer,
   onGisOpacityChange,
@@ -270,23 +270,19 @@ export default function GeoPortalPanel({
   }).filter(g => g.layers.length > 0);
 
   return (
-    <div className="glass-panel w-[350px] h-[550px] rounded-2xl border border-slate-700/50 shadow-2xl flex flex-col overflow-hidden text-slate-200 pointer-events-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-amber-500 animate-pulse" />
-          <div>
-            <h3 className="text-sm font-extrabold tracking-wide uppercase">COJAG GeoPortal</h3>
-            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest font-mono">GIS Interpreter</p>
-          </div>
-        </div>
+    <div className="flex flex-col text-slate-200 pointer-events-auto p-1">
+      {/* Top Toolbar Action Buttons */}
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-800 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+          GIS Layer Catalog
+        </span>
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => onToggleMeasuring()}
-            className={`p-1.5 rounded-lg border transition-all ${measuring ? 'bg-amber-500 border-amber-600 text-slate-950 font-bold scale-105' : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-white'}`}
+            className={`px-2 py-1 rounded-lg border text-xs transition-all ${measuring ? 'bg-amber-500 border-amber-600 text-slate-950 font-bold scale-105' : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-white'}`}
             title="Measure distance"
           >
-            📏
+            📏 {measuring ? 'Measuring ON' : 'Measure'}
           </button>
           <button
             onClick={() => setShowModal(true)}
@@ -294,9 +290,6 @@ export default function GeoPortalPanel({
             title="Geospatial help info"
           >
             <HelpCircle className="w-4 h-4" />
-          </button>
-          <button onClick={onClose} className="p-1.5 rounded-lg bg-slate-800/40 border border-slate-700/60 text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -344,7 +337,7 @@ export default function GeoPortalPanel({
             className="bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-white outline-none focus:border-amber-500 font-mono w-[110px]"
             title="ESRI Wayback Release version selector"
           >
-            {waybackReleases.slice(0, 40).map(w => (
+            {waybackReleases.slice(0, 40).map((w: any) => (
               <option key={w.rel} value={w.rel}>Wayback {w.date}</option>
             ))}
           </select>

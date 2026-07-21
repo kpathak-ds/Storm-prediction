@@ -72,12 +72,11 @@ export default function LayerControls({ layers, onToggleLayer }: LayerControlsPr
   ];
 
   return (
-    <div className="glass-panel w-72 rounded-xl p-4 shadow-2xl border border-slate-700/40 text-slate-100 flex flex-col gap-3.5 max-h-[350px] overflow-y-auto transition-all duration-300">
+    <div className="text-slate-100 flex flex-col gap-3.5 p-1">
       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-        <h2 className="text-sm font-bold tracking-wider uppercase text-slate-400 flex items-center gap-2">
-          <Layers className="w-4 h-4 text-sky-400" />
-          Map Overlays
-        </h2>
+        <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 font-mono">
+          Weather & Map Overlays
+        </span>
         <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full font-semibold">
           LIVE
         </span>

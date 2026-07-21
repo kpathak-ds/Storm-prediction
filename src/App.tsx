@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { 
   Compass, 
   Layers, 
-  Activity, 
+  Brain,
   Info,
   FolderOpen
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import AIDashboard from './components/AIDashboard';
 import SearchBar from './components/SearchBar';
 import BasemapSelector, { type BasemapType } from './components/BasemapSelector';
 import GeoPortalPanel, { type UploadedKml } from './components/GeoPortalPanel';
+import { FloatingToolbar, PanelContainer } from './components/panelManager';
 import { type GisLayerDef, GIS_CATALOG } from './api/gisCatalog';
 
 import { cities, updatePresentStorms } from './mockData';
@@ -67,6 +68,7 @@ export default function App() {
   // UI state for collapsing panels
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [showDashboardPanel, setShowDashboardPanel] = useState(false);
+  const [showBasemapSelector, setShowBasemapSelector] = useState(false);
   const [showTutorial, setShowTutorial] = useState(true);
   const [stormsUpdateKey, setStormsUpdateKey] = useState(0);
   const [loadingStorms, setLoadingStorms] = useState(true);
@@ -274,83 +276,103 @@ export default function App() {
         </div>
       </div>
 
-      {/* 3. Left Side Control Panels (Layer Controls & Basemap Switcher) */}
+      {/* 3. Left Side Docking Architecture (Floating Toolbar & Side-by-Side Panel Docking Manager) */}
       <div 
-        className="absolute left-5 bottom-[140px] flex flex-col gap-2 pointer-events-none"
-        style={{ zIndex: 10 }}
+        className="absolute left-5 bottom-[140px] flex items-start gap-3 pointer-events-none"
+        style={{ zIndex: 30 }}
       >
-        <BasemapSelector
-          activeBasemap={activeBasemap}
-          onChangeBasemap={setActiveBasemap}
+        {/* Floating Toolbar with unique, visually distinct icons */}
+        <FloatingToolbar
+          activePanels={{
+            layers: showLayerPanel,
+            geoPortal: showGeoPortal,
+            aiDashboard: showDashboardPanel,
+            basemap: showBasemapSelector,
+          }}
+          onTogglePanel={(key) => {
+            if (key === 'layers') setShowLayerPanel(prev => !prev);
+            if (key === 'geoPortal') setShowGeoPortal(prev => !prev);
+            if (key === 'aiDashboard') setShowDashboardPanel(prev => !prev);
+            if (key === 'basemap') setShowBasemapSelector(prev => !prev);
+          }}
         />
 
-        <button 
-          onClick={() => {
-            setShowGeoPortal(!showGeoPortal);
-            if (!showGeoPortal) setShowLayerPanel(false);
+        {/* Side-by-Side Panel Docking Container */}
+        <PanelContainer
+          panels={[
+            ...(showBasemapSelector ? [{
+              id: 'basemap',
+              title: 'Basemap & Imagery',
+              icon: <Compass className="w-4 h-4 text-emerald-400" />,
+              width: 'w-72',
+              content: (
+                <BasemapSelector
+                  activeBasemap={activeBasemap}
+                  onChangeBasemap={setActiveBasemap}
+                />
+              )
+            }] : []),
+            ...(showLayerPanel ? [{
+              id: 'layers',
+              title: 'Weather Overlays',
+              icon: <Layers className="w-4 h-4 text-sky-400" />,
+              width: 'w-80',
+              content: (
+                <LayerControls 
+                  layers={layers}
+                  onToggleLayer={handleToggleLayer}
+                />
+              )
+            }] : []),
+            ...(showGeoPortal ? [{
+              id: 'geoPortal',
+              title: 'COJAG Data Explorer',
+              icon: <FolderOpen className="w-4 h-4 text-amber-400" />,
+              width: 'w-80 md:w-[360px]',
+              content: (
+                <GeoPortalPanel
+                  onClose={() => setShowGeoPortal(false)}
+                  activeGisLayers={activeGisLayers}
+                  onToggleGisLayer={handleToggleGisLayer}
+                  onGisOpacityChange={handleGisOpacityChange}
+                  gibsDate={gibsDate}
+                  onGibsDateChange={setGibsDate}
+                  waybackRel={waybackRel}
+                  onWaybackRelChange={setWaybackRel}
+                  uploadedKmls={uploadedKmls}
+                  onAddKml={handleAddKml}
+                  onRemoveKml={handleRemoveKml}
+                  onUpdateKmlProps={handleUpdateKmlProps}
+                  measuring={measuring}
+                  onToggleMeasuring={() => setMeasuring(!measuring)}
+                />
+              )
+            }] : []),
+            ...(showDashboardPanel ? [{
+              id: 'aiDashboard',
+              title: 'AI Command Center',
+              icon: <Brain className="w-4 h-4 text-purple-400" />,
+              width: 'w-96 md:w-[440px]',
+              content: (
+                <AIDashboard 
+                  timeOffset={timeOffset}
+                  selectedLocationId={selectedLocationId}
+                  selectedLocationType={selectedLocationType}
+                  selectedDate={selectedDate}
+                  compareDate={compareDate}
+                  onCloseLocation={handleCloseLocation}
+                />
+              )
+            }] : []),
+          ]}
+          onClosePanel={(id) => {
+            if (id === 'layers') setShowLayerPanel(false);
+            if (id === 'geoPortal') setShowGeoPortal(false);
+            if (id === 'aiDashboard') setShowDashboardPanel(false);
+            if (id === 'basemap') setShowBasemapSelector(false);
           }}
-          className={`p-3 rounded-xl glass-panel shadow-lg border pointer-events-auto transition-all ${
-            showGeoPortal 
-              ? 'bg-black border-slate-700 text-amber-500 scale-105 shadow-amber-500/10' 
-              : 'text-slate-300 border-slate-700/50 hover:text-white hover:bg-slate-800'
-          }`}
-          title="Toggle COJAG GeoPortal"
-        >
-          <FolderOpen className="w-5 h-5" />
-        </button>
-        
-        {/* Collapsible Layer Panel */}
-        <div className="flex flex-col gap-2 pointer-events-auto h-full justify-start items-start">
-          <button 
-            onClick={() => {
-              setShowLayerPanel(!showLayerPanel);
-              if (!showLayerPanel) setShowGeoPortal(false);
-            }}
-            className={`p-3 rounded-xl glass-panel shadow-lg border transition-all ${
-              showLayerPanel 
-                ? 'bg-black border-slate-700 text-sky-400' 
-                : 'text-slate-300 border-slate-700/50 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Toggle Map Layers"
-          >
-            <Layers className="w-5 h-5" />
-          </button>
-          
-          {showLayerPanel && (
-            <div className="animate-in slide-in-from-left duration-250">
-              <LayerControls 
-                layers={layers}
-                onToggleLayer={handleToggleLayer}
-              />
-            </div>
-          )}
-        </div>
-
+        />
       </div>
-
-      {/* GeoPortal Panel — positioned independently to avoid overlap */}
-      {showGeoPortal && (
-        <div 
-          className="fixed left-[70px] bottom-[140px] z-50 pointer-events-auto animate-in slide-in-from-left duration-300"
-        >
-          <GeoPortalPanel
-            onClose={() => setShowGeoPortal(false)}
-            activeGisLayers={activeGisLayers}
-            onToggleGisLayer={handleToggleGisLayer}
-            onGisOpacityChange={handleGisOpacityChange}
-            gibsDate={gibsDate}
-            onGibsDateChange={setGibsDate}
-            waybackRel={waybackRel}
-            onWaybackRelChange={setWaybackRel}
-            uploadedKmls={uploadedKmls}
-            onAddKml={handleAddKml}
-            onRemoveKml={handleRemoveKml}
-            onUpdateKmlProps={handleUpdateKmlProps}
-            measuring={measuring}
-            onToggleMeasuring={() => setMeasuring(!measuring)}
-          />
-        </div>
-      )}
 
       {/* 4. Bottom Timeline Controller */}
       <div 
@@ -365,7 +387,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* 5. Right Edge Panels — side-by-side, no overlap */}
+      {/* 5. Right Edge Active Location Storm Panel */}
       {selectedLocationId && (
         <div className="absolute top-0 right-0 bottom-0 z-40 flex flex-row-reverse pointer-events-auto">
           <SidePanel
@@ -381,14 +403,12 @@ export default function App() {
         </div>
       )}
 
-      {/* 6. Top Right Panels (Tutorial & AI Dashboard) */}
-      <div 
-        className="absolute top-5 flex flex-col items-end gap-4 pointer-events-none transition-all duration-300"
-        style={{ right: selectedLocationId ? '404px' : '20px', zIndex: 30 }}
-      >
-        
-        {/* Onboarding Tutorial Panel */}
-        {showTutorial && (
+      {/* 6. Onboarding Tutorial Panel */}
+      {showTutorial && (
+        <div 
+          className="absolute top-5 right-5 pointer-events-none transition-all duration-300"
+          style={{ right: selectedLocationId ? '404px' : '20px', zIndex: 30 }}
+        >
           <div className="pointer-events-auto glass-panel max-w-sm rounded-xl p-4 shadow-xl border border-slate-700/40 text-slate-300 flex flex-col gap-2.5 animate-in fade-in slide-in-from-right duration-500">
             <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -412,38 +432,8 @@ export default function App() {
               <span>🟢 Low Risk</span>
             </div>
           </div>
-        )}
-
-        {/* AI Command Center Toggle */}
-        <div className="pointer-events-auto">
-          <button 
-            onClick={() => setShowDashboardPanel(!showDashboardPanel)}
-            className={`p-3 rounded-xl glass-panel shadow-lg border transition-all ${
-              showDashboardPanel 
-                ? 'bg-black border-slate-700 text-sky-400' 
-                : 'text-slate-300 border-slate-700/50 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Toggle AI Dashboard"
-          >
-            <Activity className="w-5 h-5" />
-          </button>
         </div>
-
-        {/* AI Command Center Panel */}
-        {showDashboardPanel && (
-          <div className="pointer-events-auto w-96 md:w-[480px] max-w-[85vw] animate-in slide-in-from-right duration-250 relative">
-            <AIDashboard 
-              timeOffset={timeOffset}
-              selectedLocationId={selectedLocationId}
-              selectedLocationType={selectedLocationType}
-              selectedDate={selectedDate}
-              compareDate={compareDate}
-              onCloseLocation={handleCloseLocation}
-            />
-          </div>
-        )}
-
-      </div>
+      )}
 
       {/* 8. "No Active Tropical Cyclones" Alert */}
       {isToday && activeStormsCount === 0 && !loadingStorms && (

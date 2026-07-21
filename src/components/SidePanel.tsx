@@ -4,8 +4,7 @@ import {
   calculateCityWeather,
   getInterpolatedStormState,
   cities,
-  globalStorms,
-  calculateDistance
+  globalStorms
 } from '../mockData';
 import type { 
   CityInfo, 
@@ -16,11 +15,11 @@ import type {
 
 import { useEffect, useState } from 'react';
 import { fetchLiveWeather, type OpenMeteoData } from '../api/openMeteo';
-import { getHistoricalRecord, getClimatologicalForecast } from '../api/historicalData';
+import { getHistoricalRecord } from '../api/historicalData';
 import { stormModel } from '../api/aiModel';
 import { jsPDF } from 'jspdf';
 import CustomDatePicker from './CustomDatePicker';
-import { fetchFutureWeather, getFuturePrediction, getFutureSummary } from '../api/futureService';
+import { fetchFuturePrediction, getFuturePrediction, type FuturePredictionResult } from '../api/futureService';
 
 type PanelTab = 'present' | 'past' | 'future';
 type PastRange = 'yesterday' | '7days' | '30days' | 'custom';
@@ -102,13 +101,11 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
   const [pastData, setPastData] = useState<any>(null);
   const [pastLoading, setPastLoading] = useState(false);
   const [pastError, setPastError] = useState('');
-  const [futureData, setFutureData] = useState<any>(null);
+  const [futureResult, setFutureResult] = useState<FuturePredictionResult | null>(null);
   const [futureLoading, setFutureLoading] = useState(false);
-  const [futureDays, setFutureDays] = useState(1);
-  const [isCustomFuture, setIsCustomFuture] = useState(false);
+  const [futureError, setFutureError] = useState('');
   const [isCustomFutureDate, setIsCustomFutureDate] = useState(false);
   const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-  const maxFutureStr = new Date(Date.now() + 365 * 5 * 86400000).toISOString().split('T')[0];
   const [customFutureDate, setCustomFutureDate] = useState(tomorrowStr);
   const [liveData, setLiveData] = useState<OpenMeteoData | null>(null);
   const [historicalData, setHistoricalData] = useState<any>(null);
@@ -117,7 +114,7 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
   const [apiError, setApiError] = useState(false);
   const [aqi, setAqi] = useState<number | null>(null);
   // Dummy usage to avoid TS unused variable warning
-  void compareDate; void maxFutureStr; void isCustomFuture; void futureDays; void setFutureDays; void setIsCustomFuture; void futureMLData; void setFutureMLData; void loading; void setLoading;
+  void compareDate; void futureMLData; void setFutureMLData; void loading; void setLoading;
   const todayStr = new Date().toISOString().split('T')[0];
   const isToday = selectedDate === todayStr;
   const isHistorical = selectedDate < todayStr;
@@ -189,70 +186,9 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
             }
           }
         } else if (isFuture) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const selected = new Date(selectedDate);
-          selected.setHours(0, 0, 0, 0);
-          const diffDays = Math.ceil((selected.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-          let forecastTemp = 25;
-          let forecastHum = 60;
-          let forecastWind = 12;
-          let forecastPrecip = 0;
-          let forecastPressure = 1013;
-          let forecastCloud = 30;
-
-          if (diffDays <= 16) {
-            const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${city.coord.lat}&longitude=${city.coord.lng}&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,pressure_msl,cloud_cover&forecast_days=${Math.min(16, diffDays + 1)}&timezone=auto`);
-            if (r.ok) {
-              const d = await r.json();
-              if (d.hourly?.time?.length > 0) {
-                const dayIndex = diffDays * 24 + 12;
-                const idx = Math.min(dayIndex, d.hourly.time.length - 1);
-                forecastTemp = d.hourly.temperature_2m[idx] ?? 25;
-                forecastHum = d.hourly.relative_humidity_2m[idx] ?? 60;
-                forecastWind = d.hourly.wind_speed_10m[idx] ?? 12;
-                forecastPrecip = d.hourly.precipitation[idx] ?? 0;
-                forecastPressure = d.hourly.pressure_msl[idx] ?? 1013;
-                forecastCloud = d.hourly.cloud_cover[idx] ?? 30;
-              }
-            }
-          } else {
-            const { getHistoricalRecord } = await import('../api/historicalData');
-            const pastD = new Date();
-            pastD.setDate(pastD.getDate() - 1);
-            const pastRec = await getHistoricalRecord(pastD.toISOString().split('T')[0]);
-            if (pastRec) {
-              forecastTemp = pastRec.temp;
-              forecastHum = pastRec.humidity;
-              forecastWind = pastRec.windSpeed;
-              forecastPrecip = pastRec.rainfall;
-              forecastPressure = pastRec.pressure;
-              forecastCloud = pastRec.cloudCover;
-            }
-          }
-
-          const prediction = stormModel.predict([
-            forecastTemp,
-            forecastHum,
-            forecastPressure,
-            forecastWind,
-            forecastPrecip
-          ]);
-
-          setFutureMLData({
-            temp: Math.round(forecastTemp),
-            humidity: Math.round(forecastHum),
-            pressure: Math.round(forecastPressure),
-            windSpeed: Math.round(forecastWind),
-            windGust: Math.round(forecastWind * 1.35),
-            rainfall: forecastPrecip,
-            cloudCover: forecastCloud,
-            stormProb: prediction.probability,
-            riskLevel: prediction.riskLevel,
-            confidence: prediction.confidence,
-            source: 'ML Model Prediction'
-          });
+          // Future predictions are handled independently by the Future tab's own useEffect
+          // which calls fetchFuturePrediction() from the refactored futureService.
+          // This branch is intentionally left as a no-op to avoid dual fetch conflicts.
           setLiveData(null);
           setHistoricalData(null);
         }
@@ -353,66 +289,64 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
     };
   }, [tab, pastRange, customDate, locationId, locationType]);
 
-  // Fetch FUTURE data
+  // Fetch FUTURE data — unified through the refactored futureService
   useEffect(() => {
     if (tab !== 'future' || locationType !== 'city') return;
     const city = cities.find(c => c.id === locationId);
     if (!city) return;
 
+    let active = true;
+    setFutureLoading(true);
+    setFutureError('');
+
+    // Compute the actual target date
+    let targetDate: string;
     if (isCustomFutureDate) {
-      setFutureLoading(true);
-      const parts = customFutureDate.split('-');
-      const m = parseInt(parts[1], 10);
-      const d = parseInt(parts[2], 10);
-
-      getClimatologicalForecast(m, d)
-        .then(record => {
-          console.log("AeroTempest Climatology Fetch:", { customFutureDate, m, d, record });
-          if (record) {
-            // Format it to match Open-Meteo payload shape exactly
-            const mockOpenMeteo = {
-              hourly: {
-                time: Array(24).fill(`${customFutureDate}T12:00`),
-                temperature_2m: Array(24).fill(record.temp),
-                apparent_temperature: Array(24).fill(record.temp - 1.5),
-                relative_humidity_2m: Array(24).fill(record.humidity),
-                pressure_msl: Array(24).fill(record.pressure),
-                wind_speed_10m: Array(24).fill(record.windSpeed),
-                wind_gusts_10m: Array(24).fill(record.windGust),
-                wind_direction_10m: Array(24).fill(record.windDirection),
-                precipitation: Array(24).fill(record.rainfall),
-                precipitation_probability: Array(24).fill(record.rainfall > 0 ? 80 : 10),
-                cloud_cover: Array(24).fill(record.cloudCover),
-                visibility: Array(24).fill(12000),
-                uv_index: Array(24).fill(2),
-                lightning_probability: Array(24).fill(record.cloudCover > 70 ? 40 : 5)
-              },
-              daily: {
-                sunrise: [`${customFutureDate}T06:00`],
-                sunset: [`${customFutureDate}T18:30`]
-              }
-            };
-            setFutureData(mockOpenMeteo);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setFutureLoading(false));
+      targetDate = customFutureDate;
     } else {
-      setFutureLoading(true);
-      fetchFutureWeather(city.coord, 4)
-        .then(d => setFutureData(d))
-        .catch(() => {})
-        .finally(() => setFutureLoading(false));
+      // Convert hour offset to a target date
+      const offsetMs = futureTimelineOffset * 60 * 60 * 1000;
+      const target = new Date(Date.now() + offsetMs);
+      targetDate = target.toISOString().split('T')[0];
+      // If the offset is small enough that targetDate is still today, push to tomorrow
+      const todayLocal = new Date().toISOString().split('T')[0];
+      if (targetDate <= todayLocal) {
+        const tomorrow = new Date(Date.now() + 86400000);
+        targetDate = tomorrow.toISOString().split('T')[0];
+      }
     }
-  }, [tab, isCustomFutureDate, customFutureDate, locationId, locationType]);
 
-  // Compute futureTimelineOffset dynamically when custom date is chosen
-  useEffect(() => {
-    if (tab === 'future' && isCustomFutureDate) {
-      // For custom date climatological data, offset is locked to noon (index 12)
-      setFutureTimelineOffset(12);
-    }
-  }, [tab, isCustomFutureDate, customFutureDate]);
+    console.log(`[SidePanel] Future fetch: targetDate=${targetDate}, isCustom=${isCustomFutureDate}, offset=${futureTimelineOffset}h`);
+
+    fetchFuturePrediction(city.coord, targetDate, city)
+      .then(result => {
+        if (!active) return;
+        setFutureResult(result);
+        if (!result.success) {
+          setFutureError(result.error || 'Unknown error fetching future prediction.');
+          console.error('[SidePanel] Future prediction failed:', result.error);
+        } else {
+          setFutureError('');
+          console.log('[SidePanel] Future prediction success:', {
+            dataSource: result.dataSource,
+            targetDate: result.data?.targetDate,
+            stormProbability: result.data?.stormProbability,
+            threatLevel: result.data?.threatLevel,
+          });
+        }
+      })
+      .catch(err => {
+        if (!active) return;
+        const errorMsg = `Future prediction failed: ${err?.message || 'Network error'}`;
+        setFutureError(errorMsg);
+        console.error('[SidePanel] Future prediction error:', err);
+      })
+      .finally(() => {
+        if (active) setFutureLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [tab, isCustomFutureDate, customFutureDate, futureTimelineOffset, locationId, locationType]);
 
   if (!locationId || !locationType) return null;
 
@@ -484,34 +418,21 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
     subtitle = `${city.state}, ${city.country}`;
     coordinate = city.coord;
     weather = snapshot.weather;
-    if (tab === 'future' && futureData?.hourly) {
-      const idx = futureTimelineOffset;
-      const hTime = futureData.hourly.time;
-      if (hTime && hTime.length > idx) {
-        const temp = Math.round(futureData.hourly.temperature_2m[idx]);
-        const feelsLike = Math.round(futureData.hourly.apparent_temperature?.[idx] ?? (temp - 1.5));
-        const humidity = Math.round(futureData.hourly.relative_humidity_2m[idx]);
-        const pressure = Math.round(futureData.hourly.pressure_msl[idx]);
-        const windSpeed = Math.round(futureData.hourly.wind_speed_10m[idx]);
-        const windGust = Math.round(futureData.hourly.wind_gusts_10m?.[idx] ?? (windSpeed * 1.35));
-        const visibility = Math.round(futureData.hourly.visibility?.[idx] ?? 10);
-        const rainfall = parseFloat((futureData.hourly.precipitation[idx] || 0).toFixed(2));
-        const cloudCover = Math.round(futureData.hourly.cloud_cover[idx]);
-        const lightningProb = Math.round(futureData.hourly.lightning_probability?.[idx] ?? (cloudCover > 70 ? 45 : 5));
-
-        weather = {
-          temp,
-          feelsLike,
-          humidity,
-          pressure,
-          windSpeed,
-          windGust,
-          visibility,
-          rainfall,
-          cloudCover,
-          lightningProb
-        };
-      }
+    // Override weather with future prediction data when available
+    if (tab === 'future' && futureResult?.success && futureResult.data) {
+      const fd = futureResult.data;
+      weather = {
+        temp: fd.temp,
+        feelsLike: fd.feelsLike,
+        humidity: fd.humidity,
+        pressure: fd.pressure,
+        windSpeed: fd.windSpeed,
+        windGust: fd.windGust,
+        visibility: typeof fd.visibility === 'number' && fd.visibility > 1000 ? Math.round(fd.visibility / 1000) : fd.visibility,
+        rainfall: fd.rainfall,
+        cloudCover: fd.cloudCover,
+        lightningProb: fd.lightning
+      };
     }
     distanceToEye = snapshot.distanceToEye;
 
@@ -1271,138 +1192,77 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
               </div>
             )}
 
-            {!futureLoading && futureData?.hourly && (() => {
+            {/* Error State */}
+            {!futureLoading && futureError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-4 rounded-xl flex flex-col gap-2">
+                <div className="flex gap-2 items-center">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span className="font-bold">Future Prediction Error</span>
+                </div>
+                <p className="text-[11px] leading-relaxed opacity-90">{futureError}</p>
+                {futureResult?.requestedDate && (
+                  <p className="text-[10px] opacity-60">Requested date: {futureResult.requestedDate}</p>
+                )}
+              </div>
+            )}
+
+            {/* Success State — Future Prediction Data */}
+            {!futureLoading && !futureError && futureResult?.success && futureResult.data && (() => {
               const city = cities.find(c => c.id === locationId);
               if (!city) return null;
 
-              const idx = futureTimelineOffset;
-              const hTime = futureData.hourly.time;
-              if (!hTime || hTime.length <= idx) {
-                return (
-                  <div className="flex flex-col gap-4 animate-pulse py-4">
-                    <div className="h-14 bg-slate-900 rounded-xl" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="h-28 bg-slate-900 rounded-xl" />
-                      <div className="h-28 bg-slate-900 rounded-xl" />
-                    </div>
-                    <div className="h-24 bg-slate-900 rounded-xl" />
-                    <div className="h-32 bg-slate-900 rounded-xl" />
-                  </div>
-                );
-              }
+              const fd = futureResult.data;
+              const hourly = fd.hourlyData;
 
-              // Extract offset weather details
-              const temp = Math.round(futureData.hourly.temperature_2m[idx]);
-              const feelsLike = Math.round(futureData.hourly.apparent_temperature?.[idx] ?? (temp - 1.5));
-              const humidity = Math.round(futureData.hourly.relative_humidity_2m[idx]);
-              const pressure = Math.round(futureData.hourly.pressure_msl[idx]);
-              const windSpeed = Math.round(futureData.hourly.wind_speed_10m[idx]);
-              const windGust = Math.round(futureData.hourly.wind_gusts_10m?.[idx] ?? (windSpeed * 1.35));
-              const windDir = Math.round(futureData.hourly.wind_direction_10m?.[idx] ?? 180);
-              const rainfall = parseFloat((futureData.hourly.precipitation[idx] || 0).toFixed(2));
-              const precipProb = Math.round(futureData.hourly.precipitation_probability?.[idx] ?? (rainfall > 0 ? 85 : 10));
-              const cloudCover = Math.round(futureData.hourly.cloud_cover[idx]);
-              const visibility = Math.round(futureData.hourly.visibility?.[idx] ?? 10);
-              const uvVal = futureData.hourly.uv_index?.[idx] ?? 1;
-              const lightning = Math.round(futureData.hourly.lightning_probability?.[idx] ?? (cloudCover > 70 ? 45 : 5));
+              // Build chart data from hourly data
+              const chartData: any[] = [];
+              if (hourly?.time) {
+                for (let h = 0; h < hourly.time.length && h <= 72; h += 6) {
+                  const tVal = Math.round(hourly.temperature_2m[h] ?? 25);
+                  const wVal = Math.round(hourly.wind_speed_10m[h] ?? 10);
+                  const pVal = parseFloat((hourly.precipitation[h] || 0).toFixed(2));
+                  const prVal = Math.round(hourly.pressure_msl[h] ?? 1013);
+                  const huVal = Math.round(hourly.relative_humidity_2m[h] ?? 60);
+                  const cVal = Math.round(hourly.cloud_cover[h] ?? 30);
+                  const lVal = Math.round(hourly.lightning_probability?.[h] ?? (cVal > 70 ? 40 : 5));
 
-              // Find distance to storm
-              let nearestStorm = globalStorms[0];
-              let minDistance = 9999;
-              globalStorms.forEach(storm => {
-                const stormState = getInterpolatedStormState(futureTimelineOffset, storm.track);
-                const d = calculateDistance(city.coord, stormState.position);
-                if (d < minDistance) {
-                  minDistance = d;
-                  nearestStorm = storm;
+                  const pred = getFuturePrediction({
+                    temp: tVal, humidity: huVal, pressure: prVal,
+                    windSpeed: wVal, rainfall: pVal, cloudCover: cVal, lightning: lVal,
+                  });
+
+                  chartData.push({
+                    hour: `+${h}h`, temp: tVal, windSpeed: wVal, rainfall: pVal,
+                    pressure: prVal, humidity: huVal, stormProb: pred.probability,
+                  });
                 }
-              });
-              const distanceToEye = Math.round(minDistance);
-              void windDir; void uvVal; void nearestStorm;
-
-              // Run active weather metrics through the trained Logistic Regression model
-              const trainedPrediction = stormModel.predict([
-                temp,
-                humidity,
-                pressure,
-                windSpeed,
-                rainfall
-              ]);
-
-              const prediction = {
-                probability: trainedPrediction.probability,
-                confidence: trainedPrediction.confidence,
-                threatLevel: trainedPrediction.riskLevel,
-                explainableInsights: [
-                  trainedPrediction.stormOccurred 
-                    ? `Storm passage confirmed: ${trainedPrediction.probability}% probability classified by the trained Logistic Regression model.`
-                    : `No storm detected: Stable conditions (${trainedPrediction.probability}% probability) classified by the trained Logistic Regression model.`,
-                  ...(windSpeed > 25 ? [`Brisk wind speeds recorded (${windSpeed} km/h), indicating regional pressure gradients.`] : []),
-                  ...(rainfall > 5 ? [`Convective atmospheric moisture flow: heavy precipitation detected (${rainfall} mm/hr).`] : []),
-                  `AI Engine: Trained on NASA/POWER MERRA-2 historical daily records from india_locationss.csv.`
-                ]
-              };
-
-              // Dynamic Status Analysis
-              let futureStormStatus = "No Storm Expected";
-              if (prediction.probability > 75) {
-                futureStormStatus = "Extreme Weather Expected";
-              } else if (prediction.probability > 55 || windSpeed > 45) {
-                futureStormStatus = "Cyclonic Conditions Developing";
-              } else if (prediction.probability > 35) {
-                futureStormStatus = "Storm Formation Possible";
-              } else if (windSpeed > 30) {
-                futureStormStatus = "High Wind Warning";
-              } else if (rainfall > 10) {
-                futureStormStatus = "High Flood Risk";
               }
 
-              // Get forecast summary details
-              const summary = getFutureSummary(city, futureData, futureTimelineOffset);
-
-              // Helper to safely get lookahead string for spark trend lists
-              const getLookahead = (arr: any[], offset: number, format?: (v: any) => string) => {
+              const getLookahead = (arr: any[] | undefined, offset: number, format?: (v: any) => string) => {
                 if (!arr || arr.length <= offset) return 'N/A';
                 return format ? format(arr[offset]) : arr[offset];
               };
 
-              // Recharts data generation for the bottom trends
-              const chartData = [];
-              for (let h = 0; h <= 72; h += 6) {
-                if (futureData.hourly.time[h]) {
-                  const tVal = Math.round(futureData.hourly.temperature_2m[h]);
-                  const wVal = Math.round(futureData.hourly.wind_speed_10m[h]);
-                  const pVal = parseFloat((futureData.hourly.precipitation[h] || 0).toFixed(2));
-                  const prVal = Math.round(futureData.hourly.pressure_msl[h]);
-                  const huVal = Math.round(futureData.hourly.relative_humidity_2m[h]);
-                  const cVal = Math.round(futureData.hourly.cloud_cover[h]);
-                  const lVal = Math.round(futureData.hourly.lightning_probability?.[h] ?? (cVal > 70 ? 40 : 5));
-
-                  const pred = getFuturePrediction({
-                    temp: tVal,
-                    humidity: huVal,
-                    pressure: prVal,
-                    windSpeed: wVal,
-                    rainfall: pVal,
-                    cloudCover: cVal,
-                    lightning: lVal,
-                  });
-
-                  chartData.push({
-                    hour: `+${h}h`,
-                    temp: tVal,
-                    windSpeed: wVal,
-                    rainfall: pVal,
-                    pressure: prVal,
-                    humidity: huVal,
-                    stormProb: pred.probability,
-                  });
-                }
-              }
-
               return (
                 <div className="flex flex-col gap-4 animate-in fade-in duration-200">
-                  {/* Geo Coordinates & Distance Info */}
+                  {/* Data Source Badge */}
+                  <div className={`flex items-center justify-between bg-slate-950/40 border rounded-xl p-3 text-xs ${
+                    futureResult.dataSource === 'AI_PREDICTION' ? 'border-purple-500/30' : 'border-sky-500/30'
+                  }`}>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">Prediction Source</span>
+                      <span className="text-slate-200 font-semibold">{fd.targetDate}</span>
+                    </div>
+                    <span className={`text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full border uppercase ${
+                      futureResult.dataSource === 'AI_PREDICTION'
+                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                        : 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                    }`}>
+                      {futureResult.dataSource === 'AI_PREDICTION' ? '🧠 AI Prediction' : '📡 API Forecast'}
+                    </span>
+                  </div>
+
+                  {/* Geo Coordinates & Distance */}
                   <div className="grid grid-cols-2 gap-3 bg-slate-950/40 border border-slate-800 rounded-xl p-3 text-xs font-mono">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-slate-500 uppercase tracking-wider">Latitude</span>
@@ -1422,58 +1282,46 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                     </div>
                   </div>
 
-                  {/* AI Analytics Dashboard Section */}
+                  {/* AI Analytics Dashboard */}
                   <div className="flex flex-col gap-3">
                     <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-purple-400 animate-pulse" />
-                      AI Storm Predictor (+{futureTimelineOffset}h)
+                      AI Storm Predictor ({isCustomFutureDate ? fd.targetDate : `+${futureTimelineOffset}h`})
                     </h3>
 
                     <div className="grid grid-cols-2 gap-4">
                       {/* Probability Gauge */}
                       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col items-center justify-center text-center relative overflow-hidden group">
                         <div className="relative flex items-center justify-center">
-                          {renderCircleGauge(prediction.probability, prediction.probability > 75 ? 'stroke-red-500' : prediction.probability > 45 ? 'stroke-orange-500' : prediction.probability > 20 ? 'stroke-yellow-500' : 'stroke-emerald-500')}
-                          <span className="absolute text-base font-extrabold text-white font-mono">
-                            {prediction.probability}%
-                          </span>
+                          {renderCircleGauge(fd.stormProbability, fd.stormProbability > 75 ? 'stroke-red-500' : fd.stormProbability > 45 ? 'stroke-orange-500' : fd.stormProbability > 20 ? 'stroke-yellow-500' : 'stroke-emerald-500')}
+                          <span className="absolute text-base font-extrabold text-white font-mono">{fd.stormProbability}%</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 mt-2.5 uppercase tracking-wide">
-                          Storm Probability
-                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 mt-2.5 uppercase tracking-wide">Storm Probability</span>
                       </div>
 
                       {/* Confidence Gauge */}
                       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col items-center justify-center text-center relative overflow-hidden group">
                         <div className="relative flex items-center justify-center">
-                          {renderCircleGauge(prediction.confidence, 'stroke-purple-400')}
-                          <span className="absolute text-base font-extrabold text-white font-mono">
-                            {prediction.confidence}%
-                          </span>
+                          {renderCircleGauge(fd.aiConfidence, 'stroke-purple-400')}
+                          <span className="absolute text-base font-extrabold text-white font-mono">{fd.aiConfidence}%</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 mt-2.5 uppercase tracking-wide">
-                          AI Confidence
-                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 mt-2.5 uppercase tracking-wide">AI Confidence</span>
                       </div>
 
-                      {/* Risk level badge */}
+                      {/* Risk level */}
                       <div className="col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-300">Storm Threat Classification</span>
-                        <span className={`text-xs font-black tracking-widest px-3 py-1 rounded-md border ${getRiskColor(prediction.threatLevel)}`}>
-                          {prediction.threatLevel}
-                        </span>
+                        <span className={`text-xs font-black tracking-widest px-3 py-1 rounded-md border ${getRiskColor(fd.threatLevel)}`}>{fd.threatLevel}</span>
                       </div>
 
                       {/* Storm Status Banner */}
                       <div className={`col-span-2 border rounded-xl p-3.5 flex flex-col gap-1.5 transition-all ${
-                        prediction.probability > 45 
-                          ? 'bg-red-500/10 border-red-500/20 text-red-400' 
-                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        fd.stormProbability > 45 ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                       }`}>
                         <span className="text-[9px] uppercase font-bold tracking-wider opacity-60">Status Analysis</span>
                         <span className="text-xs font-extrabold tracking-wide flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${prediction.probability > 45 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                          {futureStormStatus}
+                          <span className={`w-2.5 h-2.5 rounded-full ${fd.stormProbability > 45 ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                          {fd.stormStatus}
                         </span>
                       </div>
                     </div>
@@ -1482,40 +1330,38 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                     <div className="grid grid-cols-2 gap-3 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3.5 text-xs">
                       <div className="flex justify-between items-center border-b border-slate-800/50 pb-2">
                         <span className="text-slate-400">Storm Arrival:</span>
-                        <span className="font-semibold text-slate-200">
-                          {summary.arrivalTime === null ? 'N/A' : summary.arrivalTime === 0 ? 'Active Now' : `${summary.arrivalTime} Hours`}
-                        </span>
+                        <span className="font-semibold text-slate-200">{fd.estimatedArrival === null ? 'N/A' : fd.estimatedArrival === 0 ? 'Active Now' : `${fd.estimatedArrival} Hours`}</span>
                       </div>
                       <div className="flex justify-between items-center border-b border-slate-800/50 pb-2">
-                        <span className="text-slate-400">Storm Duration:</span>
-                        <span className="font-semibold text-slate-200">{summary.duration} Hours</span>
+                        <span className="text-slate-400">Duration:</span>
+                        <span className="font-semibold text-slate-200">{fd.estimatedDuration} Hours</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-slate-400">Heading:</span>
                         <span className="font-semibold text-slate-200 flex items-center gap-1">
                           <DirectionIcon className="w-3 h-3 text-purple-400" />
-                          {summary.direction}
+                          {fd.stormDirection}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Est. Speed:</span>
-                        <span className="font-semibold text-slate-200">{summary.speed} km/h</span>
+                        <span className="text-slate-400">Speed:</span>
+                        <span className="font-semibold text-slate-200">{fd.stormSpeed} km/h</span>
                       </div>
                       <div className="col-span-2 flex justify-between items-center border-t border-slate-800/50 pt-2 mt-2">
-                        <span className="text-slate-400">Affected Buffer Radius:</span>
-                        <span className="font-semibold text-slate-200">{summary.radius} km</span>
+                        <span className="text-slate-400">Affected Radius:</span>
+                        <span className="font-semibold text-slate-200">{fd.affectedRadius} km</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Explainable AI Predictions */}
+                  {/* Explainable AI */}
                   <div className="flex flex-col gap-2.5">
                     <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-purple-400 animate-pulse" />
                       Explainable AI Insights
                     </h3>
                     <div className="flex flex-col gap-2 bg-purple-500/[0.02] border border-purple-500/10 rounded-xl p-4">
-                      {prediction.explainableInsights.map((insight, idx) => (
+                      {fd.explainableInsights.map((insight, idx) => (
                         <div key={idx} className="flex gap-2.5 items-start text-xs leading-relaxed text-slate-300">
                           <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
                           <p>{insight}</p>
@@ -1524,64 +1370,66 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                     </div>
                   </div>
 
-                  {/* Future Weather Parameters */}
+                  {/* Weather Parameters */}
                   <div className="flex flex-col gap-3">
                     <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2 w-full">
                       <Compass className="w-4 h-4 text-purple-400" />
                       <span>Future Weather Parameters</span>
-                      <span className="text-[9px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-bold ml-auto uppercase animate-pulse shrink-0">
-                        Forecasted Conditions
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ml-auto uppercase animate-pulse shrink-0 border ${
+                        futureResult.dataSource === 'AI_PREDICTION' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                      }`}>
+                        {futureResult.dataSource === 'AI_PREDICTION' ? 'AI Predicted' : 'Forecasted'}
                       </span>
                     </h3>
 
                     <div className="grid grid-cols-2 gap-2.5">
-                      {/* Temperature Card */}
+                      {/* Temperature */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Thermometer className="w-5 h-5 text-orange-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Temp</span>
-                            <span className="text-sm font-bold text-white">{temp}°C</span>
-                            <span className="text-[9px] text-slate-400">Feels Like {feelsLike}°C</span>
+                            <span className="text-sm font-bold text-white">{fd.temp}°C</span>
+                            <span className="text-[9px] text-slate-400">Feels Like {Math.round(fd.feelsLike)}°C</span>
                           </div>
                         </div>
                         <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 grid grid-cols-5 gap-1 text-[8px] font-mono text-center">
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.temperature_2m, o, v => `${Math.round(v)}°`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.temperature_2m, o, v => `${Math.round(v)}°`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Wind Speed Card */}
+                      {/* Wind */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Wind className="w-5 h-5 text-sky-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Wind</span>
-                            <span className="text-sm font-bold text-white">{windSpeed} km/h</span>
-                            <span className="text-[9px] text-slate-400">Gusts {windGust} km/h</span>
+                            <span className="text-sm font-bold text-white">{fd.windSpeed} km/h</span>
+                            <span className="text-[9px] text-slate-400">Gusts {fd.windGust} km/h</span>
                           </div>
                         </div>
                         <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 grid grid-cols-5 gap-1 text-[8px] font-mono text-center">
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.wind_speed_10m, o, v => `${Math.round(v)}`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.wind_speed_10m, o, v => `${Math.round(v)}`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Pressure Card */}
+                      {/* Pressure */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Gauge className="w-5 h-5 text-purple-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Pressure</span>
-                            <span className="text-sm font-bold text-white">{pressure} hPa</span>
+                            <span className="text-sm font-bold text-white">{fd.pressure} hPa</span>
                             <span className="text-[9px] text-slate-400">Barometric</span>
                           </div>
                         </div>
@@ -1589,19 +1437,19 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.pressure_msl, o, v => `${Math.round(v)}`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.pressure_msl, o, v => `${Math.round(v)}`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Humidity Card */}
+                      {/* Humidity */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Droplets className="w-5 h-5 text-cyan-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Humidity</span>
-                            <span className="text-sm font-bold text-white">{humidity}%</span>
+                            <span className="text-sm font-bold text-white">{fd.humidity}%</span>
                             <span className="text-[9px] text-slate-400">Saturated flow</span>
                           </div>
                         </div>
@@ -1609,39 +1457,39 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.relative_humidity_2m, o, v => `${Math.round(v)}%`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.relative_humidity_2m, o, v => `${Math.round(v)}%`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Rainfall Card */}
+                      {/* Rainfall */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <CloudRain className="w-5 h-5 text-blue-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Rainfall</span>
-                            <span className="text-sm font-bold text-white">{rainfall} mm/h</span>
-                            <span className="text-[9px] text-slate-400">Precipitation ({precipProb}%)</span>
+                            <span className="text-sm font-bold text-white">{fd.rainfall} mm/h</span>
+                            <span className="text-[9px] text-slate-400">Precipitation ({fd.precipProbability}%)</span>
                           </div>
                         </div>
                         <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 grid grid-cols-5 gap-1 text-[8px] font-mono text-center">
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.precipitation, o, v => `${v.toFixed(1)}`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.precipitation, o, v => `${v.toFixed(1)}`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Cloud Cover Card */}
+                      {/* Cloud Cover */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Cloud className="w-5 h-5 text-slate-300 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Cloud Cover</span>
-                            <span className="text-sm font-bold text-white">{cloudCover}%</span>
+                            <span className="text-sm font-bold text-white">{fd.cloudCover}%</span>
                             <span className="text-[9px] text-slate-400">Convective index</span>
                           </div>
                         </div>
@@ -1649,124 +1497,115 @@ export default function SidePanel({ locationId, locationType, timeOffset, select
                           {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
                             <div key={o} className="flex flex-col">
                               <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.cloud_cover, o, v => `${Math.round(v)}%`)}</span>
+                              <span className="font-semibold text-slate-300">{getLookahead(hourly?.cloud_cover, o, v => `${Math.round(v)}%`)}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Lightning Card */}
+                      {/* Wind Direction */}
+                      <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
+                        <div className="flex items-center gap-3">
+                          <DirectionIcon className="w-5 h-5 text-teal-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-500 uppercase font-mono">Wind Direction</span>
+                            <span className="text-sm font-bold text-white">{fd.windDirection}°</span>
+                            <span className="text-[9px] text-slate-400">Bearing</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Lightning */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
                         <div className="flex items-center gap-3">
                           <Zap className="w-5 h-5 text-yellow-400 shrink-0" />
                           <div className="flex flex-col">
                             <span className="text-[10px] text-slate-500 uppercase font-mono">Lightning</span>
-                            <span className="text-sm font-bold text-white">{lightning}%</span>
+                            <span className="text-sm font-bold text-white">{fd.lightning}%</span>
                             <span className="text-[9px] text-slate-400">Discharge rate</span>
                           </div>
                         </div>
-                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 grid grid-cols-5 gap-1 text-[8px] font-mono text-center">
-                          {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
-                            <div key={o} className="flex flex-col">
-                              <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.lightning_probability, o, v => `${Math.round(v)}%`)}</span>
-                            </div>
-                          ))}
+                      </div>
+
+                      {/* Visibility */}
+                      <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex items-center gap-3 transition-colors">
+                        <Eye className="w-5 h-5 text-emerald-400 shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-slate-500 uppercase font-mono">Visibility</span>
+                          <span className="text-sm font-bold text-white">{typeof fd.visibility === 'number' && fd.visibility > 1000 ? Math.round(fd.visibility / 1000) : fd.visibility} km</span>
+                          <span className="text-[9px] text-slate-400">Surface sight</span>
                         </div>
                       </div>
 
-                      {/* Visibility Card */}
-                      <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col transition-colors">
-                        <div className="flex items-center gap-3">
-                          <Eye className="w-5 h-5 text-emerald-400 shrink-0" />
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-slate-500 uppercase font-mono">Visibility</span>
-                            <span className="text-sm font-bold text-white">{visibility} km</span>
-                            <span className="text-[9px] text-slate-400">Surface sight</span>
-                          </div>
-                        </div>
-                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/60 grid grid-cols-5 gap-1 text-[8px] font-mono text-center">
-                          {[{o:0,l:'Cur'},{o:3,l:'+3h'},{o:6,l:'+6h'},{o:12,l:'+12h'},{o:24,l:'+24h'}].map(({o,l}) => (
-                            <div key={o} className="flex flex-col">
-                              <span className="text-slate-500">{l}</span>
-                              <span className="font-semibold text-slate-300">{getLookahead(futureData.hourly.visibility, o, v => `${Math.round(v / 1000)}k`)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Sunrise Card */}
+                      {/* Sunrise */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex items-center gap-3 transition-colors">
                         <Sunrise className="w-5 h-5 text-amber-400 shrink-0" />
                         <div className="flex flex-col">
                           <span className="text-[10px] text-slate-500 uppercase font-mono">Sunrise</span>
                           <span className="text-xs font-bold text-white">
-                            {futureData.daily?.sunrise?.[0] ? new Date(futureData.daily.sunrise[0]).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '06:00 AM'}
+                            {fd.dailyData?.sunrise?.[0] ? new Date(fd.dailyData.sunrise[0]).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '06:00 AM'}
                           </span>
-                          <span className="text-[9px] text-slate-400">First light</span>
                         </div>
                       </div>
 
-                      {/* Sunset Card */}
+                      {/* Sunset */}
                       <div className="bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex items-center gap-3 transition-colors">
                         <Sunset className="w-5 h-5 text-indigo-400 shrink-0" />
                         <div className="flex flex-col">
                           <span className="text-[10px] text-slate-500 uppercase font-mono">Sunset</span>
                           <span className="text-xs font-bold text-white">
-                            {futureData.daily?.sunset?.[0] ? new Date(futureData.daily.sunset[0]).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '06:30 PM'}
+                            {fd.dailyData?.sunset?.[0] ? new Date(fd.dailyData.sunset[0]).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '06:30 PM'}
                           </span>
-                          <span className="text-[9px] text-slate-400">Dusk</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Future Charts Section */}
-                  <div className="flex flex-col gap-3 border-t border-slate-800/60 pt-4 pb-6">
-                    <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-purple-400" />
-                      72-Hour Forecast Trends
-                    </h3>
-
-                    <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 flex flex-col gap-4">
-                      {/* Temp & Wind Speed Trend Chart */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">Temperature & Wind Speed Trend</span>
-                        <div className="h-36 w-full">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                              <XAxis dataKey="hour" stroke="#475569" fontSize={8} tickLine={false} />
-                              <YAxis stroke="#475569" fontSize={8} tickLine={false} />
-                              <ChartTooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' }} />
-                              <Line type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={2} name="Temp (°C)" dot={false} />
-                              <Line type="monotone" dataKey="windSpeed" stroke="#06b6d4" strokeWidth={1.5} name="Wind (km/h)" dot={false} strokeDasharray="3 3" />
-                            </LineChart>
-                          </ResponsiveContainer>
+                  {/* Charts */}
+                  {chartData.length > 0 && (
+                    <div className="flex flex-col gap-3 border-t border-slate-800/60 pt-4 pb-6">
+                      <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-purple-400" />
+                        Forecast Trends
+                      </h3>
+                      <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5 flex flex-col gap-4">
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">Temperature & Wind Speed</span>
+                          <div className="h-36 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                                <XAxis dataKey="hour" stroke="#475569" fontSize={8} tickLine={false} />
+                                <YAxis stroke="#475569" fontSize={8} tickLine={false} />
+                                <ChartTooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' }} />
+                                <Line type="monotone" dataKey="temp" stroke="#f97316" strokeWidth={2} name="Temp (°C)" dot={false} />
+                                <Line type="monotone" dataKey="windSpeed" stroke="#06b6d4" strokeWidth={1.5} name="Wind (km/h)" dot={false} strokeDasharray="3 3" />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
-                      </div>
-
-                      {/* Pressure & Storm Prob Trend Chart */}
-                      <div className="flex flex-col gap-1.5 border-t border-slate-800/60 pt-3">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">Barometric Pressure & Storm Probability</span>
-                        <div className="h-36 w-full">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                              <XAxis dataKey="hour" stroke="#475569" fontSize={8} tickLine={false} />
-                              <YAxis stroke="#475569" fontSize={8} tickLine={false} />
-                              <ChartTooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' }} />
-                              <Area type="monotone" dataKey="stormProb" stroke="#a855f7" fill="rgba(168, 85, 247, 0.1)" strokeWidth={2} name="Storm Prob (%)" />
-                              <Line type="monotone" dataKey="pressure" stroke="#8b5cf6" strokeWidth={1.5} name="Pressure (hPa)" dot={false} />
-                            </AreaChart>
-                          </ResponsiveContainer>
+                        <div className="flex flex-col gap-1.5 border-t border-slate-800/60 pt-3">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase font-mono">Pressure & Storm Probability</span>
+                          <div className="h-36 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                                <XAxis dataKey="hour" stroke="#475569" fontSize={8} tickLine={false} />
+                                <YAxis stroke="#475569" fontSize={8} tickLine={false} />
+                                <ChartTooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '10px' }} />
+                                <Area type="monotone" dataKey="stormProb" stroke="#a855f7" fill="rgba(168, 85, 247, 0.1)" strokeWidth={2} name="Storm Prob (%)" />
+                                <Line type="monotone" dataKey="pressure" stroke="#8b5cf6" strokeWidth={1.5} name="Pressure (hPa)" dot={false} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })()}
           </div>
         )}
+
 
         {/* PRESENT TAB — all existing content */}
         {tab==='present' && <>
