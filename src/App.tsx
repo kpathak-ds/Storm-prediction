@@ -15,6 +15,10 @@ import AIDashboard from './components/AIDashboard';
 import SearchBar from './components/SearchBar';
 import BasemapSelector, { type BasemapType } from './components/BasemapSelector';
 import GeoPortalPanel, { type UploadedKml } from './components/GeoPortalPanel';
+import { SettingsProvider } from './context/SettingsContext';
+import { SidebarNav, type NavTab } from './components/layout/SidebarNav';
+import { SettingsModal } from './components/settings/SettingsModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { FloatingToolbar, PanelContainer } from './components/panelManager';
 import { type GisLayerDef, GIS_CATALOG } from './api/gisCatalog';
 
@@ -65,7 +69,11 @@ export default function App() {
   void setSelectedDate;
   void setCompareDate;
 
-  // UI state for collapsing panels
+  // UI state for sidebar & platform panels
+  const [activeNavTab, setActiveNavTab] = useState<NavTab>('map');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [showDashboardPanel, setShowDashboardPanel] = useState(false);
   const [showBasemapSelector, setShowBasemapSelector] = useState(false);
@@ -225,50 +233,73 @@ export default function App() {
     }
   };
 
-  return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#07090e] select-none text-slate-100 font-sans">
-      
-      {/* 1. Full-screen Interactive Weather Map */}
-      <div className="absolute inset-0 w-full h-full z-0">
-        <WeatherMap
-          key={stormsUpdateKey}
-          timeOffset={timeOffset}
-          layers={layers}
-          selectedLocationId={selectedLocationId}
-          onSelectLocation={handleSelectLocation}
-          onMapClick={handleMapClick}
-          searchTrigger={searchTrigger}
-          selectedDate={selectedDate}
-          activeTab={activePanelTab}
-          activeBasemap={activeBasemap}
-          activeGisLayers={activeGisLayers}
-          gibsDate={gibsDate}
-          waybackRel={waybackRel}
-          uploadedKmls={uploadedKmls}
-          measuring={measuring}
-        />
-      </div>
+  const handleSelectNavTab = (tab: NavTab) => {
+    setActiveNavTab(tab);
+    if (tab === 'settings') {
+      setShowSettingsModal(true);
+    } else if (tab === 'analytics') {
+      setShowDashboardPanel(true);
+    } else if (tab === 'dashboard') {
+      setShowLayerPanel(true);
+    }
+  };
 
-      {/* 2. Top-Left Branding & Search Overlay */}
-      <div 
-        className="absolute top-5 left-5 flex flex-col gap-3 pointer-events-none"
-        style={{ zIndex: 9999 }}
-      >
-        
-        {/* Branding header */}
-        <div className="glass-panel rounded-2xl px-4 py-3 shadow-xl border border-slate-700/40 flex items-center gap-3 pointer-events-auto">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-sky-500/25 animate-pulse">
-            <Compass className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '12s' }} />
-          </div>
-          <div>
-            <h1 className="text-sm font-extrabold tracking-widest text-white uppercase font-heading flex items-center gap-1.5">
-              AeroTempest <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold">AI</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-              Storm Intelligence Platform
-            </p>
-          </div>
-        </div>
+  return (
+    <SettingsProvider>
+      <ErrorBoundary fallbackTitle="AI Weather Intelligence Platform Error">
+        <main className="relative w-screen h-screen overflow-hidden bg-[#07090e] select-none text-slate-100 font-sans flex">
+          
+          {/* Sidebar Navigation */}
+          <SidebarNav
+            activeTab={activeNavTab}
+            onSelectTab={handleSelectNavTab}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+
+          {/* Main Content Area */}
+          <div className="relative flex-1 h-full overflow-hidden">
+            {/* 1. Full-screen Interactive Weather Map */}
+            <div className="absolute inset-0 w-full h-full z-0">
+              <WeatherMap
+                key={stormsUpdateKey}
+                timeOffset={timeOffset}
+                layers={layers}
+                selectedLocationId={selectedLocationId}
+                onSelectLocation={handleSelectLocation}
+                onMapClick={handleMapClick}
+                searchTrigger={searchTrigger}
+                selectedDate={selectedDate}
+                activeTab={activePanelTab}
+                activeBasemap={activeBasemap}
+                activeGisLayers={activeGisLayers}
+                gibsDate={gibsDate}
+                waybackRel={waybackRel}
+                uploadedKmls={uploadedKmls}
+                measuring={measuring}
+              />
+            </div>
+
+            {/* 2. Top-Left Branding & Search Overlay */}
+            <div 
+              className="absolute top-5 left-5 flex flex-col gap-3 pointer-events-none"
+              style={{ zIndex: 9999 }}
+            >
+              
+              {/* Branding header */}
+              <div className="glass-panel rounded-2xl px-4 py-3 shadow-xl border border-slate-700/40 flex items-center gap-3 pointer-events-auto">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-blue-600 to-purple-600 flex items-center justify-center shadow-lg shadow-sky-500/25 animate-pulse">
+                  <Compass className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '12s' }} />
+                </div>
+                <div>
+                  <h1 className="text-sm font-extrabold tracking-widest text-white uppercase font-heading flex items-center gap-1.5">
+                    AeroTempest <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold">ENTERPRISE</span>
+                  </h1>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                    AI Weather Intelligence Platform
+                  </p>
+                </div>
+              </div>
 
         {/* Search & Date Controls */}
         <div className="pointer-events-auto w-full flex flex-col gap-2">
@@ -443,6 +474,15 @@ export default function App() {
         </div>
       )}
 
-    </main>
+          </div>
+
+          {/* Platform Settings Modal */}
+          <SettingsModal
+            isOpen={showSettingsModal}
+            onClose={() => setShowSettingsModal(false)}
+          />
+        </main>
+      </ErrorBoundary>
+    </SettingsProvider>
   );
 }
