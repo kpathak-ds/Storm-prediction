@@ -18,6 +18,10 @@ import GeoPortalPanel, { type UploadedKml } from './components/GeoPortalPanel';
 import { SettingsProvider } from './context/SettingsContext';
 import { SidebarNav, type NavTab } from './components/layout/SidebarNav';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { ComparisonModal } from './components/analytics/ComparisonModal';
+import { ReportExportModal } from './components/reports/ReportExportModal';
+import { AlertNotificationCenter } from './components/alerts/AlertNotificationCenter';
+import { AlertService, type SevereAlert } from './services/alertService';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { FloatingToolbar, PanelContainer } from './components/panelManager';
 import { type GisLayerDef, GIS_CATALOG } from './api/gisCatalog';
@@ -73,6 +77,10 @@ export default function App() {
   const [activeNavTab, setActiveNavTab] = useState<NavTab>('map');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showAlertsDrawer, setShowAlertsDrawer] = useState(false);
+  const [activeAlerts, setActiveAlerts] = useState<SevereAlert[]>([]);
 
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [showDashboardPanel, setShowDashboardPanel] = useState(false);
@@ -93,6 +101,10 @@ export default function App() {
           updatePresentStorms(activeList);
           setActiveStormsCount(activeList.length);
           setStormsUpdateKey(k => k + 1);
+
+          // Evaluate real-time alerts
+          const evaluated = AlertService.evaluateAlerts(null, activeList.length > 0 ? 80 : 10);
+          setActiveAlerts(evaluated);
         }
       } catch (err) {
         console.error("Failed to sync storms:", err);
@@ -326,6 +338,10 @@ export default function App() {
             if (key === 'aiDashboard') setShowDashboardPanel(prev => !prev);
             if (key === 'basemap') setShowBasemapSelector(prev => !prev);
           }}
+          onOpenComparison={() => setShowComparisonModal(true)}
+          onOpenReportModal={() => setShowReportModal(true)}
+          onOpenAlerts={() => setShowAlertsDrawer(prev => !prev)}
+          alertCount={activeAlerts.length}
         />
 
         {/* Side-by-Side Panel Docking Container */}
@@ -480,6 +496,26 @@ export default function App() {
           <SettingsModal
             isOpen={showSettingsModal}
             onClose={() => setShowSettingsModal(false)}
+          />
+
+          {/* Weather Comparison Modal */}
+          <ComparisonModal
+            isOpen={showComparisonModal}
+            onClose={() => setShowComparisonModal(false)}
+          />
+
+          {/* Report Export Modal */}
+          <ReportExportModal
+            isOpen={showReportModal}
+            onClose={() => setShowReportModal(false)}
+            selectedLocationId={selectedLocationId}
+          />
+
+          {/* Hazard Alert Notification Drawer */}
+          <AlertNotificationCenter
+            alerts={activeAlerts}
+            isOpen={showAlertsDrawer}
+            onClose={() => setShowAlertsDrawer(false)}
           />
         </main>
       </ErrorBoundary>
